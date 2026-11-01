@@ -1,4 +1,6 @@
 export const currencies=['UAH','USD','EUR'];
+export function combinedBalance(accounts,transactions,rates={}){let total=0;for(const a of accounts){const n=balance(a,transactions);if(a.currency==='UAH'){total+=n;continue}const rate=rates[a.currency];if(n!==0&&(!Number.isFinite(rate)||rate<=0))return null;total+=Math.round(n*(rate||0))}return total}
+export function parseRates(rows,date){const rates={UAH:1};for(const cc of ['USD','EUR']){const row=Array.isArray(rows)&&rows.find(r=>r.cc===cc);if(!row||!Number.isFinite(row.rate)||row.rate<=0||row.exchangedate!==date)throw Error('Некорректный курс НБУ');rates[cc]=row.rate}return rates}
 export function minor(value){const s=String(value).trim().replace(',','.');if(!/^\d{1,10}(\.\d{1,2})?$/.test(s))throw Error('Введите сумму с точностью до двух знаков');const n=Math.round(Number(s)*100);if(!Number.isSafeInteger(n))throw Error('Слишком большая сумма');return n}
 export function money(n,c='UAH'){return new Intl.NumberFormat('ru-RU',{style:'currency',currency:c}).format(n/100)}
 export function balance(a,ts){return Number(a.opening_minor)+ts.filter(t=>t.account_id===a.id).reduce((s,t)=>s+(t.kind==='income'?1:-1)*Number(t.amount_minor),0)}
