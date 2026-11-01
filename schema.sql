@@ -26,8 +26,8 @@ create table public.recurring (
  id uuid primary key default gen_random_uuid(), user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
  account_id uuid not null, category_id uuid not null, kind text not null check(kind in ('income','expense')),
  amount_minor bigint not null check(amount_minor>0 and amount_minor<=999999999999), next_date date not null,
- interval_months integer not null check(interval_months in (1,3,12)), note text not null default '' check(length(note)<=200),
- last_posted_at timestamptz,
+ interval_months integer not null check(interval_months in (0,1,3,12)), note text not null default '' check(length(note)<=200),
+ last_posted_at timestamptz, completed_at timestamptz,
  foreign key(account_id,user_id) references public.accounts(id,user_id),foreign key(category_id,user_id) references public.categories(id,user_id)
 );
 create index transactions_owner_date on public.transactions(user_id,date);
@@ -42,16 +42,21 @@ do $$ declare t text; begin foreach t in array array['accounts','categories','tr
  execute format('grant select,insert,update,delete on public.%I to authenticated',t);
 end loop; end $$;
 -- A transaction and next due date are committed together. Row lock prevents concurrent double clicks.
-create function public.post_recurring(rule_id uuid) returns uuid language plpgsql security invoker set search_path=public as $$
+create or replace function public.post_recurring(rule_id uuid) returns uuid language plpgsql security invoker set search_path=public as $$
 declare r public.recurring; new_id uuid;
 begin
  select * into r from public.recurring where id=rule_id and user_id=auth.uid() for update;
  if not found then raise exception 'Платёж не найден'; end if;
+ if r.completed_at is not null then raise exception 'Разовый платёж уже проведён'; end if;
  if r.last_posted_at > now()-interval '10 seconds' then raise exception 'Платёж уже проведён. Обновите страницу.'; end if;
- if r.next_date > current_date then raise exception 'Дата платежа ещё не наступила'; end if;
+ if r.next_date > (now() at time zone 'Europe/Kyiv')::date then raise exception 'Дата платежа ещё не наступила'; end if;
  insert into public.transactions(user_id,account_id,category_id,kind,amount_minor,date,note)
  values(auth.uid(),r.account_id,r.category_id,r.kind,r.amount_minor,r.next_date,r.note) returning id into new_id;
+ if r.interval_months=0 then
+ update public.recurring set completed_at=now(),last_posted_at=now() where id=rule_id;
+ else
  update public.recurring set next_date=(r.next_date+make_interval(months=>r.interval_months))::date,last_posted_at=now() where id=rule_id;
+ end if;
  return new_id;
 end $$;
 revoke all on function public.post_recurring(uuid) from public,anon;
