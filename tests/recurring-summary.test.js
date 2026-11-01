@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {pendingRegularExpenses} from '../finance.js';
+const accounts=[{id:'uah',currency:'UAH'},{id:'usd',currency:'USD'}];
+test('pending metric sums next expenses in UAH, excluding regular income',()=>{const rows=[{id:'b',account_id:'usd',kind:'expense',amount_minor:2500,next_date:'2026-11-05'},{id:'a',account_id:'uah',kind:'expense',amount_minor:10000,next_date:'2026-10-30'},{id:'c',account_id:'uah',kind:'income',amount_minor:900000,next_date:'2026-11-01'}];const result=pendingRegularExpenses(rows,accounts,{USD:40});assert.equal(result.total,110000);assert.deepEqual(result.rows.map(r=>r.id),['a','b']);assert.equal(rows[0].id,'b')});
+test('missing rate or account never yields an incomplete sum',()=>{assert.equal(pendingRegularExpenses([{id:'a',account_id:'usd',kind:'expense',amount_minor:1,next_date:'2026-11-01'}],accounts).total,null);assert.equal(pendingRegularExpenses([],accounts).total,0)});
